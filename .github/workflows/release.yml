@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(tr -d '\r\n' < VERSION)"
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ ! "$VERSION" =~ ^V[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION must follow Vx.y.z"
+            exit 1
+          fi
+
+      - name: Lint PHP
+        shell: bash
+        run: |
+          while IFS= read -r file; do
+            php -l "$file"
+          done < <(find . -name '*.php' -print)
+
+      - name: Ensure unique version
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            TAG_SHA="$(git rev-list -n 1 "$VERSION")"
+            if [[ "$TAG_SHA" != "$GITHUB_SHA" ]]; then
+              echo "Version $VERSION already exists on another commit"
+              exit 1
+            fi
+          fi
+
+      - name: Create tag
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$VERSION" -m "Release $VERSION"
+            git push origin "$VERSION"
+          fi
+
+      - name: Build release notes
+        id: notes
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          NOTES_FILE="$(mktemp)"
+          awk -v ver="$VERSION" '
+            $0 ~ "^## " ver "([[:space:]]|$)" {capture=1; next}
+            capture && /^## / {exit}
+            capture {print}
+          ' CHANGELOG.md > "$NOTES_FILE"
+          if [[ ! -s "$NOTES_FILE" ]]; then
+            printf 'Release %s\n' "$VERSION" > "$NOTES_FILE"
+          fi
+          echo "path=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          NOTES_FILE="${{ steps.notes.outputs.path }}"
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release edit "$VERSION" --title "$VERSION" --notes-file "$NOTES_FILE"
+          else
+            gh release create "$VERSION" --title "$VERSION" --notes-file "$NOTES_FILE"
+          fi

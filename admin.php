@@ -60,7 +60,9 @@ $cameras = load_cameras();
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Admin | <?php echo h($config['site_name']); ?></title>
+    <meta name="application-name" content="<?php echo h($config['site_name']); ?>">
+    <meta name="generator" content="<?php echo h($config['site_name'] . ' ' . app_version()); ?>">
+    <title>Admin | <?php echo h($config['site_name'] . ' ' . app_version()); ?></title>
     <link rel="stylesheet" href="assets/css/app.css">
 </head>
 <body class="app-shell app-shell--admin">
@@ -71,9 +73,13 @@ $cameras = load_cameras();
         <div>
             <p class="eyebrow">Configuracion</p>
             <h1>Administrar camaras</h1>
-            <p class="subtle">Alta, edicion y prueba de fuentes HTTP y RTSP dentro de tu LAN.</p>
+            <p class="subtle">Alta, edicion y prueba de fuentes HTTP y RTSP dentro de tu LAN. Version <?php echo h(app_version()); ?>.</p>
         </div>
         <div class="topbar__actions">
+            <div class="metric">
+                <span class="metric__label">Version</span>
+                <strong class="metric__value"><?php echo h(app_version()); ?></strong>
+            </div>
             <a class="button button--ghost" href="index.php">Volver al panel</a>
         </div>
     </header>
@@ -105,7 +111,7 @@ $cameras = load_cameras();
                     </label>
                     <label>
                         <span>Puertos HTTP/RTSP</span>
-                        <input type="text" name="ports" value="<?php echo h($defaultDiscoveryPorts); ?>" placeholder="80,81,88,443,554,8000,8080,8443,8554">
+                        <input type="text" name="ports" value="<?php echo h($defaultDiscoveryPorts); ?>" placeholder="80,81,88,443,554,6668,7000,8000,8080,8443">
                     </label>
                 </div>
 
@@ -127,7 +133,7 @@ $cameras = load_cameras();
                 <?php endif; ?>
 
                 <div class="form-help">
-                    <strong>Consejo:</strong> primero usa el modo recomendado. Si no aparece la camara, agrega su puerto web o RTSP manualmente y luego prueba el barrido completo. ONVIF detecta muchas camaras modernas sin conocer la IP exacta, y ahora el modo mixto tambien prueba mejor equipos con interfaz HTTPS.
+                    <strong>Consejo:</strong> primero usa el modo recomendado. Si no aparece la camara, agrega su puerto web o RTSP manualmente y luego prueba el barrido completo. Si ves dispositivos propietarios tipo Tuya o Smart Life, el equipo esta en la LAN pero probablemente no expone video web directo y necesitara RTSP, ONVIF o un bridge adicional para verse desde este panel.
                 </div>
 
                 <div class="form-actions">
@@ -279,5 +285,12 @@ $cameras = load_cameras();
     </main>
 
     <script src="assets/js/admin.js"></script>
+    <footer class="app-footer">
+        <span><?php echo h($config['site_name'] . ' ' . app_version()); ?></span>
+        <span><?php echo h(app_config_value('license_name', 'Apache License 2.0')); ?></span>
+        <?php if (app_config_value('repository_url', '') !== ''): ?>
+            <a href="<?php echo h(app_config_value('repository_url', '')); ?>" target="_blank" rel="noopener">GitHub</a>
+        <?php endif; ?>
+    </footer>
 </body>
 </html>

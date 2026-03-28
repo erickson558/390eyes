@@ -42,6 +42,7 @@
         var meta = data.meta || {};
         var text = 'Objetivo: ' + (data.resolved_target || data.requested_target || '-') + ' | ';
         text += 'Encontradas: ' + (data.items ? data.items.length : 0) + ' | ';
+        text += 'Compatibilidad limitada: ' + (meta.unsupported_items || 0) + ' | ';
         text += 'Hosts escaneados: ' + (meta.hosts_scanned || 0) + ' | ';
         text += 'ONVIF: ' + (meta.onvif_items || 0) + ' | ';
         text += 'RTSP: ' + (meta.rtsp_items || 0) + ' | ';
@@ -60,6 +61,10 @@
     }
 
     function itemUrlLine(item) {
+        if (item.unsupported) {
+            return item.host && item.port ? ('Puerto propietario: ' + item.host + ':' + item.port) : '';
+        }
+
         if (item.snapshot_url) {
             return 'Snapshot: ' + item.snapshot_url;
         }
@@ -79,14 +84,44 @@
         return '';
     }
 
-    function renderResults(items) {
+    function renderHintCards(hints) {
+        var html = '';
+        var i;
+
+        for (i = 0; i < hints.length; i += 1) {
+            var item = hints[i];
+            html += ''
+                + '<article class="discover-card">'
+                + '<div class="discover-card__head">'
+                + '<div>'
+                + '<h3>' + escapeHtml(item.name || ('Dispositivo ' + item.ip)) + '</h3>'
+                + '<p>' + escapeHtml(item.ip + ':' + item.port + ' | ' + (item.confidence || '')) + '</p>'
+                + '</div>'
+                + '<span class="tag">' + escapeHtml(item.type || 'proprietary') + '</span>'
+                + '</div>'
+                + '<p class="discover-card__meta">' + escapeHtml(item.vendor || 'Dispositivo propietario') + '</p>'
+                + '<p class="discover-card__meta">' + escapeHtml(itemSourceText(item)) + '</p>'
+                + '<p class="discover-card__meta">' + escapeHtml(itemUrlLine(item)) + '</p>'
+                + '<p class="discover-card__meta">' + escapeHtml(item.note || '') + '</p>'
+                + '<div class="discover-card__actions">'
+                + '<span class="tag">No visible en web</span>'
+                + '</div>'
+                + '</article>';
+        }
+
+        return html;
+    }
+
+    function renderResults(items, hints, meta) {
         if (!discoverResults) {
             return;
         }
 
         currentResults = items || [];
+        hints = hints || [];
+        meta = meta || {};
 
-        if (!currentResults.length) {
+        if (!currentResults.length && !hints.length) {
             discoverResults.innerHTML = '<div class="discover-empty">No se detectaron camaras con los criterios actuales. Prueba el modo completo o agrega el puerto HTTP, HTTPS o RTSP del equipo.</div>';
             return;
         }
@@ -113,6 +148,16 @@
                 + '<button class="button button--ghost" type="button" data-use-result="' + i + '">Usar deteccion</button>'
                 + '</div>'
                 + '</article>';
+        }
+
+        if (hints.length) {
+            if (!currentResults.length) {
+                html += '<div class="discover-empty">No se encontraron camaras web compatibles. ' + escapeHtml(meta.diagnostic_message || 'Hay dispositivos propietarios en la LAN que podrian corresponder a camaras de app.') + '</div>';
+            } else {
+                html += '<div class="discover-empty">' + escapeHtml(meta.diagnostic_message || 'Tambien hay dispositivos propietarios detectados en la LAN.') + '</div>';
+            }
+
+            html += renderHintCards(hints);
         }
 
         discoverResults.innerHTML = html;
@@ -174,7 +219,7 @@
                 try {
                     var data = JSON.parse(xhr.responseText);
                     renderSummary(data);
-                    renderResults(data.items || []);
+                    renderResults(data.items || [], data.hints || [], data.meta || {});
                     return;
                 } catch (error) {
                 }

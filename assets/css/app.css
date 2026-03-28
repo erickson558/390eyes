@@ -642,6 +642,23 @@ select {
     background: rgba(7, 18, 29, 0.82);
 }
 
+.app-footer {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    gap: 12px 18px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 24px;
+    padding: 14px 18px 4px;
+    color: var(--muted);
+    font-size: 0.86rem;
+}
+
+.app-footer a {
+    color: var(--accent);
+}
+
 .alert--success {
     border-color: rgba(64, 211, 155, 0.26);
 }

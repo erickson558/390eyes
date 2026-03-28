@@ -284,7 +284,7 @@ function default_discovery_target()
 
 function default_scan_ports_text()
 {
-    return '80,81,82,83,88,443,554,8000,8001,8080,8081,8086,8090,8443,8554,8899,10554';
+    return '80,81,82,83,88,443,554,6668,6669,7000,7001,8000,8001,8080,8081,8086,8090,8443,8554,8899,10554,34567,37777';
 }
 
 function parse_scan_ports($text)
@@ -473,6 +473,49 @@ function known_hosts_for_target($targetInfo)
     sort($items);
 
     return $items;
+}
+
+function arp_hosts_indexed_by_ip()
+{
+    $indexed = array();
+
+    foreach (parse_arp_hosts() as $entry) {
+        $indexed[$entry['ip']] = $entry;
+    }
+
+    return $indexed;
+}
+
+function mac_prefix($mac, $octets)
+{
+    $mac = strtolower(trim((string) $mac));
+    $octets = (int) $octets;
+
+    if ($mac === '' || $octets < 1) {
+        return '';
+    }
+
+    $parts = preg_split('/[:-]/', $mac);
+
+    if (!is_array($parts) || count($parts) < $octets) {
+        return '';
+    }
+
+    $parts = array_slice($parts, 0, $octets);
+
+    return implode('-', $parts);
+}
+
+function oui_vendor_hint_from_mac($mac)
+{
+    $prefix = mac_prefix($mac, 3);
+    $map = array(
+        '68-57-2d' => 'Tuya Smart',
+        '80-64-7c' => 'Tuya Smart',
+        'd8-c8-0c' => 'Tuya Smart',
+    );
+
+    return isset($map[$prefix]) ? $map[$prefix] : '';
 }
 
 function sample_hosts_across_target($targetInfo, $limit)
@@ -705,7 +748,7 @@ function simple_http_probe($url, $timeout, $maxBytes)
             'method' => 'GET',
             'timeout' => (float) $timeout,
             'ignore_errors' => true,
-            'header' => "User-Agent: 390Eyes-LAN-Monitor/1.0\r\nConnection: close\r\n",
+            'header' => "User-Agent: " . app_user_agent() . "\r\nConnection: close\r\n",
         ),
         'ssl' => array(
             'verify_peer' => false,
@@ -840,6 +883,11 @@ function http_probe_schemes_for_port($port)
     }
 
     return array('http', 'https');
+}
+
+function proprietary_camera_hint_ports()
+{
+    return array(6668, 6669, 7000, 7001, 34567, 37777);
 }
 
 function has_camera_http_marker($text)
@@ -1215,7 +1263,7 @@ function probe_rtsp_endpoint($host, $port, $path, $timeout)
     $uri = 'rtsp://' . $host . ':' . (int) $port . $path;
     $request = "OPTIONS " . $uri . " RTSP/1.0\r\n"
         . "CSeq: 1\r\n"
-        . "User-Agent: 390Eyes-LAN-Monitor/1.0\r\n"
+        . "User-Agent: " . app_user_agent() . "\r\n"
         . "\r\n";
 
     @fwrite($stream, $request);
@@ -1284,6 +1332,11 @@ function detect_rtsp_camera_on_port($ip, $port, $timeout)
         return null;
     }
 
+    $rtspBlob = strtolower($best['body']);
+    if (strpos($rtspBlob, 'airtunes') !== false || strpos($rtspBlob, 'airplay') !== false || strpos($rtspBlob, 'apple') !== false) {
+        return null;
+    }
+
     $vendor = detect_vendor_hint($best['body']);
     $score = 5;
     $evidence = array('Servicio RTSP detectado');
@@ -1325,6 +1378,70 @@ function detect_rtsp_camera_on_port($ip, $port, $timeout)
         'evidence' => $evidence,
         'note' => 'RTSP detectado. Para verlo en navegador necesitas MJPEG, HLS, WebRTC o un reproductor externo.',
     );
+}
+
+function detect_proprietary_camera_hint($ip, $arpEntry, $openPorts)
+{
+    if (empty($arpEntry) || empty($openPorts)) {
+        return null;
+    }
+
+    $vendor = oui_vendor_hint_from_mac(isset($arpEntry['mac']) ? $arpEntry['mac'] : '');
+    $matchedPorts = array_values(array_intersect(proprietary_camera_hint_ports(), $openPorts));
+
+    if ($vendor === '' || empty($matchedPorts)) {
+        return null;
+    }
+
+    $port = (int) $matchedPorts[0];
+    $evidence = array(
+        'OUI detectado: ' . $vendor,
+        'Puerto propietario abierto: ' . $port,
+    );
+
+    $note = 'Dispositivo ' . $vendor . ' detectado. Muchas camaras de este ecosistema usan protocolo propietario y no exponen video local por HTTP, RTSP u ONVIF.';
+
+    return array(
+        'ip' => $ip,
+        'port' => $port,
+        'vendor' => $vendor,
+        'name' => $vendor . ' ' . $ip,
+        'type' => 'proprietary',
+        'snapshot_url' => '',
+        'stream_url' => '',
+        'embed_url' => '',
+        'host' => $ip,
+        'source' => 'ARP + TCP',
+        'score' => 3,
+        'confidence' => 'Baja',
+        'evidence' => $evidence,
+        'note' => $note,
+        'unsupported' => true,
+        'mac' => isset($arpEntry['mac']) ? $arpEntry['mac'] : '',
+    );
+}
+
+function proprietary_diagnostic_message($hints)
+{
+    if (empty($hints)) {
+        return '';
+    }
+
+    $ips = array();
+
+    foreach ($hints as $hint) {
+        $ips[] = $hint['ip'];
+    }
+
+    sort($ips);
+    $shown = array_slice($ips, 0, 8);
+    $text = 'Se detectaron dispositivos con puertos propietarios en ' . implode(', ', $shown);
+
+    if (count($ips) > count($shown)) {
+        $text .= ' y otros mas';
+    }
+
+    return $text . '. Si tus camaras son Tuya, Smart Life o similares, probablemente no exponen video LAN directo.';
 }
 
 function merge_discovery_item($left, $right)
@@ -1376,12 +1493,18 @@ function discover_cameras($target, $portsText, $mode)
 {
     $mode = in_array($mode, array('smart', 'full', 'onvif'), true) ? $mode : 'smart';
     $ports = parse_scan_ports($portsText);
+    $hintPorts = proprietary_camera_hint_ports();
+    $portsToProbe = $ports;
+    append_unique_hosts($portsToProbe, $hintPorts);
     $scanLimit = ($mode === 'full') ? 256 : 128;
     $targetInfo = resolve_scan_target($target, $scanLimit);
     $items = array();
+    $hints = array();
     $startedAt = microtime(true);
     $onvifCount = 0;
     $rtspCount = 0;
+    $unsupportedCount = 0;
+    $arpByIp = arp_hosts_indexed_by_ip();
 
     if ($mode === 'smart' || $mode === 'onvif') {
         $onvifDevices = discover_onvif_devices(2);
@@ -1410,7 +1533,7 @@ function discover_cameras($target, $portsText, $mode)
         append_unique_hosts($hostsToScan, array($device['ip']));
     }
 
-    $openPorts = batch_open_ports($hostsToScan, $ports, 0.6, 96);
+    $openPorts = batch_open_ports($hostsToScan, $portsToProbe, 0.6, 96);
 
     foreach ($hostsToScan as $ip) {
         if (empty($openPorts[$ip])) {
@@ -1457,18 +1580,44 @@ function discover_cameras($target, $portsText, $mode)
     $results = array_values($items);
     usort($results, 'sort_discovery_items');
 
+    foreach ($hostsToScan as $ip) {
+        if (isset($items[$ip])) {
+            continue;
+        }
+
+        $hint = detect_proprietary_camera_hint(
+            $ip,
+            isset($arpByIp[$ip]) ? $arpByIp[$ip] : null,
+            isset($openPorts[$ip]) ? $openPorts[$ip] : array()
+        );
+
+        if ($hint === null) {
+            continue;
+        }
+
+        $hints[] = $hint;
+        $unsupportedCount += 1;
+    }
+
+    if (!empty($hints)) {
+        usort($hints, 'sort_discovery_items');
+    }
+
     return array(
         'requested_target' => $targetInfo['input'],
         'resolved_target' => $targetInfo['label'],
         'mode' => $mode,
         'ports' => $ports,
         'items' => $results,
+        'hints' => $hints,
         'meta' => array(
             'hosts_requested' => $targetInfo['count'],
             'hosts_scanned' => count($hostsToScan),
             'known_hosts' => count($knownHosts),
             'onvif_items' => $onvifCount,
             'rtsp_items' => $rtspCount,
+            'unsupported_items' => $unsupportedCount,
+            'diagnostic_message' => proprietary_diagnostic_message($hints),
             'truncated' => $targetInfo['truncated'] && $mode !== 'onvif',
             'elapsed_ms' => round((microtime(true) - $startedAt) * 1000),
         ),

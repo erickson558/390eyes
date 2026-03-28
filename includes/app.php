@@ -6,6 +6,50 @@ if (session_id() === '') {
 
 date_default_timezone_set(app_config_value('timezone', 'UTC'));
 
+function app_root_path()
+{
+    return dirname(__DIR__);
+}
+
+function app_version_path()
+{
+    return app_root_path() . '/VERSION';
+}
+
+function app_version()
+{
+    static $version = null;
+
+    if ($version !== null) {
+        return $version;
+    }
+
+    $version = 'V0.0.0';
+    $path = app_version_path();
+
+    if (!file_exists($path)) {
+        return $version;
+    }
+
+    $content = trim((string) @file_get_contents($path));
+
+    if ($content !== '' && preg_match('/^V\d+\.\d+\.\d+$/', $content)) {
+        $version = $content;
+    }
+
+    return $version;
+}
+
+function app_release_version()
+{
+    return ltrim(app_version(), 'V');
+}
+
+function app_user_agent()
+{
+    return '390Eyes-LAN-Monitor/' . app_release_version();
+}
+
 function app_config()
 {
     static $config = null;
@@ -19,6 +63,8 @@ function app_config()
         'timezone' => 'UTC',
         'default_refresh_seconds' => 10,
         'status_timeout' => 2,
+        'license_name' => 'Apache License 2.0',
+        'repository_url' => '',
     );
 
     $configFile = dirname(__DIR__) . '/config/app.php';
@@ -44,7 +90,7 @@ function app_config_value($key, $default)
 
 function camera_storage_path()
 {
-    return dirname(__DIR__) . '/data/cameras.json';
+    return app_root_path() . '/data/cameras.json';
 }
 
 function ensure_camera_storage()
@@ -498,7 +544,7 @@ function remote_auth_header($camera)
 function remote_stream_context($camera, $timeout)
 {
     $headers = array(
-        'User-Agent: 390Eyes-LAN-Monitor/1.0',
+        'User-Agent: ' . app_user_agent(),
         'Connection: close',
     );
 

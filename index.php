@@ -21,7 +21,9 @@ $enabledCount = count($cameras);
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?php echo h($config['site_name']); ?></title>
+    <meta name="application-name" content="<?php echo h($config['site_name']); ?>">
+    <meta name="generator" content="<?php echo h($config['site_name'] . ' ' . app_version()); ?>">
+    <title><?php echo h($config['site_name'] . ' ' . app_version()); ?></title>
     <link rel="stylesheet" href="assets/css/app.css">
 </head>
 <body class="app-shell">
@@ -32,7 +34,7 @@ $enabledCount = count($cameras);
         <div>
             <p class="eyebrow">Monitoreo LAN</p>
             <h1><?php echo h($config['site_name']); ?></h1>
-            <p class="subtle">Panel local para visualizar camaras IP dentro de tu red.</p>
+            <p class="subtle">Panel local para visualizar camaras IP dentro de tu red. Version <?php echo h(app_version()); ?>.</p>
         </div>
         <div class="topbar__actions">
             <div class="metric">
@@ -42,6 +44,10 @@ $enabledCount = count($cameras);
             <div class="metric">
                 <span class="metric__label">Estado</span>
                 <strong class="metric__value" id="summaryOnline">-</strong>
+            </div>
+            <div class="metric">
+                <span class="metric__label">Version</span>
+                <strong class="metric__value"><?php echo h(app_version()); ?></strong>
             </div>
             <a class="button button--ghost" href="admin.php">Admin</a>
         </div>
@@ -151,5 +157,12 @@ $enabledCount = count($cameras);
     </div>
 
     <script src="assets/js/app.js"></script>
+    <footer class="app-footer">
+        <span><?php echo h($config['site_name'] . ' ' . app_version()); ?></span>
+        <span><?php echo h(app_config_value('license_name', 'Apache License 2.0')); ?></span>
+        <?php if (app_config_value('repository_url', '') !== ''): ?>
+            <a href="<?php echo h(app_config_value('repository_url', '')); ?>" target="_blank" rel="noopener">GitHub</a>
+        <?php endif; ?>
+    </footer>
 </body>
 </html>
