@@ -1,0 +1,7 @@
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/
+
+# Local runtime data
+data/*.json
